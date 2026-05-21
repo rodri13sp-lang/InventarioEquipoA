@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario NORESTE · Consulta y Gestión</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ================================================================ */
+  /* Design tokens — corporate slate + desaturated jade accents        */
+  /* ================================================================ */
+  :root {
+    --bg:            #f5f6f4;
+    --surface:       #ffffff;
+    --surface-2:     #fafbf9;
+    --border:        #e3e6e1;
+    --border-strong: #cdd2cb;
+    --ink:           #1a2229;
+    --ink-2:         #3b454f;
+    --ink-3:         #6b7680;
+    --muted:         #9aa3ac;
+
+    --accent:        #2f6b5e;
+    --accent-soft:   #e8f0ed;
+    --accent-deep:   #1f4a40;
+
+    /* Work-status colours (Pendiente / En curso / Hecho) */
+    --st-pending:    #c44545;
+    --st-pending-bg: #fbeaea;
+    --st-progress:   #c98a2d;
+    --st-progress-bg:#fbf3e0;
+    --st-done:       #2e7d32;
+    --st-done-bg:    #e6f1e7;
+  }
+
+  html, body { background: var(--bg); color: var(--ink); }
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-display { font-family: 'Fraunces', Georgia, serif; letter-spacing: -0.02em; }
+  .font-mono    { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+
+  /* Subtle grain on background */
+  .grain::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: radial-gradient(rgba(0,0,0,.025) 1px, transparent 1px);
+    background-size: 3px 3px; opacity: .5;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+
+  /* ----- Buttons -------------------------------------------------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    transition: all 120ms; border: 1px solid transparent;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-deep); }
+  .btn-secondary { background: #fff; color: var(--ink-2); border-color: var(--border-strong); }
+  .btn-secondary:hover { background: var(--surface-2); border-color: var(--ink-3); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ----- Pills ---------------------------------------------------- */
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .pill-accent { background: var(--accent-soft); color: var(--accent-deep); border-color: #c9ddd6; }
+  .pill-gray   { background: #eef0ed;            color: var(--ink-2);       border-color: var(--border); }
+  .pill-blue   { background: #e7eef5;            color: #2e4d6b;            border-color: #c8d6e3; }
+
+  /* ----- Splash Loader ------------------------------------------- */
+  .loader-card {
+    background: #fff; border: 1px solid var(--border);
+    box-shadow: 0 10px 30px -15px rgba(0,0,0,.08);
+  }
+
+  /* ----- Facet filter blocks ------------------------------------- */
+  .facet {
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .facet:last-child { border-bottom: none; }
+  .facet-title {
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-3);
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; cursor: pointer; user-select: none;
+  }
+  .facet-title .chev { transition: transform 180ms; opacity: .6; }
+  .facet.collapsed .chev { transform: rotate(-90deg); }
+  .facet.collapsed .facet-body { display: none; }
+
+  .facet-checkbox {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 6px; margin: 0 -6px;
+    border-radius: 5px; font-size: 13px; color: var(--ink-2);
+    cursor: pointer; transition: background 80ms;
+  }
+  .facet-checkbox:hover { background: var(--surface-2); }
+  .facet-checkbox input { accent-color: var(--accent); cursor: pointer; }
+  .facet-checkbox .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facet-checkbox .count { color: var(--muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+
+  .facet-search {
+    width: 100%; padding: 5px 9px; margin-bottom: 6px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 12px;
+  }
+  .facet-search:focus { outline: none; border-color: var(--accent); }
+
+  .facet-show-more {
+    font-size: 12px; color: var(--accent); cursor: pointer;
+    margin-top: 4px; padding: 2px 6px; margin-left: -6px;
+    display: inline-block;
+  }
+  .facet-show-more:hover { text-decoration: underline; }
+
+  /* ----- PK range inputs ----------------------------------------- */
+  .range-input {
+    width: 100%; padding: 6px 10px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; font-family: 'JetBrains Mono', monospace;
+  }
+  .range-input:focus { outline: none; border-color: var(--accent); }
+
+  /* ----- Result cards (the new "list view") ---------------------- */
+  .card {
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    transition: all 140ms; cursor: pointer;
+    position: relative;
+  }
+  .card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 4px 14px -8px rgba(0,0,0,.12);
+    transform: translateY(-1px);
+  }
+  .card.has-status { border-left-width: 4px; padding-left: 13px; }
+  .card.status-pending  { border-left-color: var(--st-pending); }
+  .card.status-progress { border-left-color: var(--st-progress); }
+  .card.status-done     { border-left-color: var(--st-done); }
+
+  .card-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px 18px; margin-top: 10px;
+    font-size: 12.5px;
+  }
+  .card-grid .k { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .card-grid .v { color: var(--ink); font-weight: 500; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ----- 4-state work-status toggle ------------------------------ */
+  .status-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    border: 1px solid var(--border-strong); background: #fff; color: var(--ink-3);
+    cursor: pointer; transition: all 120ms; user-select: none;
+    white-space: nowrap;
+  }
+  .status-toggle:hover { transform: scale(1.03); }
+  .status-toggle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status-toggle.s-pending  { background: var(--st-pending-bg);  color: var(--st-pending);  border-color: #efc7c7; }
+  .status-toggle.s-pending  .dot { background: var(--st-pending); }
+  .status-toggle.s-progress { background: var(--st-progress-bg); color: #6e5119;             border-color: #ecdcaa; }
+  .status-toggle.s-progress .dot { background: var(--st-progress); }
+  .status-toggle.s-done     { background: var(--st-done-bg);     color: var(--st-done);     border-color: #c5dec6; }
+  .status-toggle.s-done     .dot { background: var(--st-done); }
+
+  /* ----- Detail side panel --------------------------------------- */
+  .detail-panel {
+    background: #fff; border-left: 1px solid var(--border);
+    box-shadow: -16px 0 40px -20px rgba(0,0,0,.18);
+  }
+  .kv-row {
+    display: grid; grid-template-columns: 200px 1fr; gap: 16px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .kv-row:last-child { border-bottom: none; }
+  .kv-key { color: var(--ink-3); font-size: 12px; }
+  .kv-val { color: var(--ink); font-weight: 500; word-break: break-word; white-space: normal; }
+  .kv-val.empty { color: var(--muted); font-weight: 400; font-style: italic; }
+
+  /* ----- Animations ---------------------------------------------- */
+  @keyframes fade-in { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)} }
+  .fade-in { animation: fade-in 200ms ease-out; }
+  @keyframes slide-in-right { from{transform:translateX(100%)} to{transform:translateX(0)} }
+  .slide-in { animation: slide-in-right 280ms cubic-bezier(.2,.7,.2,1); }
+  @keyframes pulse-soft { 0%,100%{opacity:1} 50%{opacity:.55} }
+  .pulse { animation: pulse-soft 1.6s ease-in-out infinite; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 4px 3px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent-deep);
+    border: 1px solid #c9ddd6; font-size: 12px; font-weight: 500;
+  }
+  .chip button {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--accent-deep); transition: background 100ms;
+  }
+  .chip button:hover { background: rgba(31,74,64,.12); }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white; }
+    .card { break-inside: avoid; box-shadow: none !important; }
+  }
+</style>
+</head>
+
+<body class="grain min-h-screen">
+
+<header class="relative z-10 border-b border-[var(--border)] bg-white">
+  <div class="max-w-[1700px] mx-auto px-8 py-5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-[var(--accent)] flex items-center justify-center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round">
+          <path d="M3 12h4l3-8 4 16 3-8h4"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="font-display text-xl text-[var(--ink)] leading-none">Inventario <span class="text-[var(--accent)]">NORESTE</span></h1>
+        <p class="text-xs text-[var(--ink-3)] mt-1">Consulta, cruce y seguimiento de elementos de infraestructura</p>
+      </div>
+    </div>
+    <div id="header-stats" class="hidden md:flex items-center gap-6 text-xs text-[var(--ink-3)]">
+      <div><span id="stat-rows" class="font-mono font-semibold text-[var(--ink)]">0</span> registros</div>
+      <div class="w-px h-4 bg-[var(--border)]"></div>
+      <div><span id="stat-ids" class="font-mono font-semibold text-[var(--ink)]">0</span> IDs únicos</div>
+      <div class="w-px h-4 bg-[var(--border)]"></div>
+      <div><span id="stat-tracked" class="font-mono font-semibold text-[var(--accent-deep)]">0</span> con estado</div>
+    </div>
+  </div>
+</header>
+
+<main class="relative z-10 max-w-[1700px] mx-auto px-8 py-6">
+
+  <section id="upload-section" class="mb-6 flex justify-center items-center pt-12">
+    <div class="loader-card rounded-2xl p-10 text-center max-w-xl w-full">
+      <div class="w-14 h-14 rounded-full bg-[var(--accent-soft)] mx-auto mb-4 flex items-center justify-center">
+        <svg class="animate-spin" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+      <h2 class="font-display text-2xl text-[var(--ink)] mb-2">Cargando base de datos</h2>
+      <p class="text-sm text-[var(--ink-3)] mb-6">Sincronizando inventarios de infraestructura desde el repositorio central...</p>
+      
+      <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden mb-4">
+        <div id="progress-bar" class="bg-[var(--accent)] h-full w-0 transition-all duration-300"></div>
+      </div>
+      
+      <div id="progress-list" class="mt-4 text-left space-y-1 divide-y divide-gray-100"></div>
+    </div>
+  </section>
+
+  <section id="dashboard" class="hidden">
+    <div class="grid grid-cols-12 gap-6">
+
+      <aside class="col-span-12 lg:col-span-3 space-y-4">
+
+        <div class="bg-white border border-[var(--border)] rounded-xl p-4">
+          <label class="text-xs uppercase tracking-wider text-[var(--ink-3)] font-semibold">Búsqueda</label>
+          <div class="relative mt-2">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-3)]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="search-input" type="text" placeholder="ID, identificador, descripción…"
+              class="w-full pl-9 pr-9 py-2.5 text-sm bg-[var(--surface-2)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)]">
+            <button id="clear-search" class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 hidden items-center justify-center rounded text-[var(--ink-3)] hover:bg-[var(--surface-2)]">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="facets" class="bg-white border border-[var(--border)] rounded-xl overflow-hidden">
+          </div>
+
+        <div class="flex gap-2">
+          <button id="reset-filters" class="btn btn-secondary flex-1 justify-center">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 4 3 12 11 12"/></svg>
+            Limpiar filtros
+          </button>
+        </div>
+      </aside>
+
+      <section class="col-span-12 lg:col-span-9 space-y-4">
+
+        <div class="bg-white border border-[var(--border)] rounded-xl px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h3 class="font-display text-lg text-[var(--ink)]">Resultados</h3>
+            <span id="result-count" class="text-sm text-[var(--ink-3)]">—</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="flex items-center gap-1.5 text-xs text-[var(--ink-3)]">
+              Ordenar
+              <select id="sort-by" class="bg-white border border-[var(--border)] rounded px-2 py-1 text-xs">
+                <option value="pk_asc"   selected>PK ascendente</option>
+                <option value="pk_desc"          >PK descendente</option>
+                <option value="line_asc"         >Línea (código)</option>
+                <option value="dist_asc"         >Distrito</option>
+                <option value="cat_asc"          >Categoría</option>
+                <option value="status"           >Estado de trabajo</option>
+              </select>
+            </label>
+            <button id="print-btn" class="btn btn-secondary" title="Imprimir / PDF">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              PDF
+            </button>
+          </div>
+        </div>
+
+        <div id="active-chips" class="flex flex-wrap gap-2 hidden"></div>
+
+        <div id="cards-container" class="space-y-3 min-h-[60vh]"></div>
+
+        <div class="flex items-center justify-between px-5 py-3 bg-white border border-[var(--border)] rounded-xl text-xs text-[var(--ink-3)]">
+          <div id="page-info">—</div>
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1.5">
+              Por página
+              <select id="page-size" class="bg-white border border-[var(--border)] rounded px-2 py-1 text-xs">
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <div class="flex items-center gap-1 ml-2">
+              <button id="page-prev" class="btn btn-secondary px-2.5 py-1.5 text-xs">‹</button>
+              <span id="page-indicator" class="font-mono px-2">1 / 1</span>
+              <button id="page-next" class="btn btn-secondary px-2.5 py-1.5 text-xs">›</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<div id="detail-backdrop" class="fixed inset-0 bg-black/30 z-40 hidden no-print"></div>
+<aside id="detail-panel" class="detail-panel fixed top-0 right-0 h-full w-full md:w-[680px] z-50 hidden flex-col no-print">
+  <header class="flex items-start justify-between px-6 py-5 border-b border-[var(--border)]">
+    <div class="min-w-0">
+      <div class="text-xs uppercase tracking-wider text-[var(--ink-3)] font-semibold">Id. Inventario</div>
+      <div id="detail-id" class="font-mono text-xl text-[var(--ink)] mt-1">—</div>
+      <div id="detail-subtitle" class="text-sm text-[var(--ink-3)] mt-1">—</div>
+    </div>
+    <button id="detail-close" class="w-8 h-8 rounded-lg hover:bg-[var(--surface-2)] flex items-center justify-center text-[var(--ink-3)]">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </header>
+  <div id="detail-body" class="overflow-y-auto flex-1 px-6 py-5"></div>
+</aside>
+
+<script>
+'use strict';
+
+/* ================================================================== */
+/* CONFIGURATION Centralized files configuration                     */
+/* ================================================================== */
+const INVENTARIOS_FILES = [
+  { key: 'tramo_via',       label: 'Tramo de Vía',          file: 'TRAMO DE VIA.xls - Resultado Consulta.csv' },
+  { key: 'travesias',       label: 'Travesías',             file: 'TRAVESIAS.xls - Resultado Consulta.csv' },
+  { key: 'tuneles',         label: 'Túneles',               file: 'TUNELES.xls - Resultado Consulta.csv' },
+  { key: 'aparatos',        label: 'Aparatos Dilatación',   file: 'APARATOS DILATACION.xls - Resultado Consulta.csv' },
+  { key: 'desmontes',       label: 'Desmontes',             file: 'DESMONTES.xls - Resultado Consulta.csv' },
+  { key: 'desvios',         label: 'Desvíos',               file: 'DESVIOS.xls - Resultado Consulta.csv' },
+  { key: 'encarriladoras',  label: 'Encarriladoras',        file: 'ENCARRILADORAS.xls - Resultado Consulta.csv' },
+  { key: 'puentes',         label: 'Puentes',               file: 'PUENTES.xls - Resultado Consulta.csv' },
+  { key: 'terraplenes',     label: 'Terraplenes',           file: 'TERRAPLENES.xls - Resultado Consulta.csv' }
+];
+
+const CATEGORIES = INVENTARIOS_FILES.map(item => ({ key: item.key, label: item.label }));
+const KEY_FIELD = 'Id. Inventario';
+const LOCALSTORAGE_KEY = 'noreste_work_status_v1';
+const STATUS_CYCLE = ['off', 'pending', 'progress', 'done'];
+const STATUS_LABELS = {
+  off:      { text: 'Sin estado',  cls: '' },
+  pending:  { text: 'Pendiente',   cls: 's-pending'  },
+  progress: { text: 'En curso',    cls: 's-progress' },
+  done:     { text: 'Hecho',       cls: 's-done'     },
+};
+
+/* ================================================================== */
+/* GLOBAL APP STATE                                                   */
+/* ================================================================== */
+const state = {
+  allRows: [],
+  indexById: new Map(),
+  catColumns: Object.create(null),
+  catMeta: Object.create(null),
+  searchBlobs: [],
+  filters: {
+    text: '',
+    categories: new Set(),
+    distritos:  new Set(),
+    lineas:     new Set(),
+    estados:    new Set(),
+    via:        '',
+    pkMin:      null,
+    pkMax:      null,
+    statusSet:  new Set(),
+  },
+  filtered: [],
+  sortBy:   'pk_asc',
+  page:      0,
+  pageSize: 50,
+  workStatus: loadWorkStatus(),
+  facetValues: { categories: [], distritos: [], lineas: [], estados: [] }
+};
+
+/* ================================================================== */
+/* PERSISTENCE                                                        */
+/* ================================================================== */
+function loadWorkStatus() {
+  try {
+    const raw = localStorage.getItem(LOCALSTORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function saveWorkStatus() {
+  try {
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(state.workStatus));
+  } catch {}
+}
+
+/* ================================================================== */
+/* UTILITIES & HELPERS                                                */
+/* ================================================================== */
+function normalize(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function fmt(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'number') {
+    if (Number.isNaN(v)) return '';
+    return Number.isInteger(v) ? String(v) : v.toLocaleString('es-ES', { maximumFractionDigits: 3 });
+  }
+  return String(v).trim();
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function escapeHtml(s) {
+  if (s === '' || s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function parseNumeric(v) {
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/* ================================================================== */
+/* CSV PARSING AUTOMATION Engine                                      */
+/* ================================================================== */
+
+// Un analizador CSV nativo robusto que soporta celdas entrecomilladas con comas
+function parseCSV(text) {
+  const lines = [];
+  let row = [""];
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const next = text[i+1];
+    if (c === '"') {
+      if (inQuotes && next === '"') { row[row.length - 1] += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (c === ',' && !inQuotes) {
+      row.push("");
+    } else if ((c === '\r' || c === '\n') && !!inQuotes) {
+      if (c === '\r' && next === '\n') { i++; }
+      lines.push(row);
+      row = [""];
+    } else {
+      row[row.length - 1] += c;
+    }
+  }
+  if (row.length > 1 || row[0] !== "") { lines.push(row); }
+  return lines;
+}
+
+async function fetchAndProcessCSV(fileConfig, onRowCreated) {
+  // Petición directa al servidor de GitHub Pages local
+  const response = await fetch(encodeURIComponent(fileConfig.file));
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  
+  const text = await response.text();
+  const rawMatrix = parseCSV(text);
+
+  // Buscar la fila de la cabecera (suele estar tras un par de filas vacías)
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(15, rawMatrix.length); i++) {
+    if (rawMatrix[i].some(cell => normalize(cell).includes('id. inventario') || normalize(cell).includes('id. raiz'))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) headerIdx = 0; // Fallback
+
+  const headers = rawMatrix[headerIdx].map(h => String(h || '').trim());
+  
+  // Buscar mapeo exacto de Id. Inventario o Id. Raíz
+  let targetKeyHeader = headers.find(h => normalize(h) === 'id. inventario') || headers.find(h => normalize(h) === 'id. raiz') || headers[0];
+
+  const processedRows = [];
+  for (let i = headerIdx + 1; i < rawMatrix.length; i++) {
+    const rawRow = rawMatrix[i];
+    if (!rawRow || rawRow.every(cell => cell === '')) continue;
+
+    const obj = {};
+    let hasData = false;
+    
+    for (let c = 0; c < headers.length; c++) {
+      const headerName = headers[c];
+      if (!headerName) continue;
+      const val = rawRow[c] !== undefined ? rawRow[c].trim() : '';
+      if (val !== '') hasData = true;
+      obj[headerName] = val;
+    }
+
+    if (hasData) {
+      // Normalización forzosa de la clave maestra al estándar de la app
+      if (obj[targetKeyHeader] && targetKeyHeader !== KEY_FIELD) {
+        obj[KEY_FIELD] = obj[targetKeyHeader];
+      }
+      obj._cat = fileConfig.key;
+      obj._catLabel = fileConfig.label;
+      obj._file = fileConfig.file;
+      processedRows.push(obj);
+    }
+  }
+
+  return { headers, rows: processedRows };
+}
+
+/* ================================================================== */
+/* DOM REFERENCES                                                     */
+/* ================================================================== */
+const $ = (id) => document.getElementById(id);
+const progressBar     = $('progress-bar');
+const progressList    = $('progress-list');
+const uploadSection   = $('upload-section');
+const dashboard       = $('dashboard');
+const searchInput     = $('search-input');
+const clearSearchBtn  = $('clear-search');
+const facetsEl        = $('facets');
+const activeChipsEl   = $('active-chips');
+const cardsContainer  = $('cards-container');
+const resultCountEl   = $('result-count');
+const pageInfo        = $('page-info');
+const pageIndicator   = $('page-indicator');
+const pageSizeSel     = $('page-size');
+const pagePrev        = $('page-prev');
+const pageNext        = $('page-next');
+const sortBySel       = $('sort-by');
+const printBtn        = $('print-btn');
+const resetFiltersBtn = $('reset-filters');
+const detailPanel     = $('detail-panel');
+const detailBackdrop  = $('detail-backdrop');
+const detailClose     = $('detail-close');
+const detailIdEl      = $('detail-id');
+const detailSubtitle  = $('detail-subtitle');
+const detailBody      = $('detail-body');
+const headerStats     = $('header-stats');
+const statRows        = $('stat-rows');
+const statIds         = $('stat-ids');
+const statTracked     = $('stat-tracked');
+
+/* ================================================================== */
+/* INITIALIZATION AUTOMATIC FLOW                                      */
+/* ================================================================== */
+
+// Carga automática al arrancar la app en segundo plano
+window.addEventListener('DOMContentLoaded', runAutomatedIntake);
+
+async function runAutomatedIntake() {
+  let completedCount = 0;
+  
+  // Inicializar interfaz visual de carga
+  INVENTARIOS_FILES.forEach(item => {
+    const indicator = document.createElement('div');
+    indicator.className = 'flex items-center justify-between py-1.5 text-xs text-[var(--ink-2)]';
+    indicator.id = `load-${item.key}`;
+    indicator.innerHTML = `<span>${item.label}</span><span class="font-mono text-[var(--muted)] pulse">Descargando...</span>`;
+    progressList.appendChild(indicator);
+  });
+
+  // Ejecución asíncrona masiva en paralelo
+  const tasks = INVENTARIOS_FILES.map(async (fileConfig) => {
+    const el = document.getElementById(`load-${fileConfig.key}`);
+    try {
+      const result = await fetchAndProcessCSV(fileConfig);
+      
+      state.catColumns[fileConfig.key] = result.headers;
+      state.catMeta[fileConfig.key] = { fileName: fileConfig.file, rowCount: result.rows.length, label: fileConfig.label };
+      state.allRows.push(...result.rows);
+
+      if (el) el.innerHTML = `<span>${fileConfig.label}</span><span class="pill pill-accent">${result.rows.length.toLocaleString('es-ES')} filas</span>`;
+    } catch (err) {
+      console.error(`Error procesando ${fileConfig.label}:`, err);
+      if (el) el.innerHTML = `<span>${fileConfig.label}</span><span class="text-[var(--st-pending)] font-semibold">Error de enlace</span>`;
+    } finally {
+      completedCount++;
+      progressBar.style.width = `${Math.round((completedCount / INVENTARIOS_FILES.length) * 100)}%`;
+    }
+  });
+
+  await Promise.all(tasks);
+
+  // Indexar y optimizar búsquedas cruzadas
+  buildIndexAndBlobs();
+  buildFacetValues();
+
+  // Transición suave al panel de control
+  setTimeout(() => {
+    uploadSection.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    dashboard.classList.add('fade-in');
+    renderFacets();
+    updateHeaderStats();
+    headerStats.classList.remove('hidden');
+    applyFilters();
+  }, 400);
+}
+
+function buildIndexAndBlobs() {
+  state.indexById = new Map();
+  state.searchBlobs = new Array(state.allRows.length);
+
+  for (let i = 0; i < state.allRows.length; i++) {
+    const row = state.allRows[i];
+    const id = row[KEY_FIELD];
+    
+    if (id !== '' && id !== null && id !== undefined) {
+      const k = String(id).trim();
+      let arr = state.indexById.get(k);
+      if (!arr) { arr = []; state.indexById.set(k, arr); }
+      arr.push(i);
+    }
+
+    let s = '';
+    for (const k in row) {
+      if (k.charCodeAt(0) === 95) continue;
+      const v = row[k];
+      if (v !== '' && v !== null && v !== undefined) s += ' ' + v;
+    }
+    state.searchBlobs[i] = normalize(s);
+  }
+}
+
+function buildFacetValues() {
+  const cats = new Map();
+  const distritos = new Map();
+  const lineas = new Map();
+  const estados = new Map();
+
+  for (const r of state.allRows) {
+    cats.set(r._cat, (cats.get(r._cat) || 0) + 1);
+
+    const dcode = r['EQM1 Código']; const dname = r['EQM1'];
+    if (dcode !== '' && dcode !== null && dcode !== undefined) {
+      const k = String(dcode).trim();
+      const e = distritos.get(k) || { code: dcode, name: dname || '', count: 0 };
+      e.count++;
+      distritos.set(k, e);
+    }
+
+    const lcode = r['Línea Código']; const ldesc = r['Línea Descripción'];
+    if (lcode !== '' && lcode !== null && lcode !== undefined) {
+      const k = String(lcode).trim();
+      const e = lineas.get(k) || { code: lcode, desc: ldesc || '', count: 0 };
+      e.count++;
+      lineas.set(k, e);
+    }
+
+    const est = r['Estado Elemento Inventario'];
+    if (est !== '' && est !== null && est !== undefined) {
+      const k = String(est).trim();
+      estados.set(k, (estados.get(k) || 0) + 1);
+    }
+  }
+
+  state.facetValues.categories = CATEGORIES
+    .filter(c => cats.has(c.key))
+    .map(c => ({ value: c.key, label: c.label, count: cats.get(c.key) }));
+
+  state.facetValues.distritos = [...distritos.values()]
+    .sort((a, b) => b.count - a.count)
+    .map(d => ({ value: String(d.code), label: `${d.code} · ${d.name}`, count: d.count }));
+
+  state.facetValues.lineas = [...lineas.values()]
+    .sort((a, b) => b.count - a.count)
+    .map(l => ({ value: String(l.code), label: `${l.code} · ${l.desc}`, count: l.count }));
+
+  state.facetValues.estados = [...estados.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([v, c]) => ({ value: v, label: v, count: c }));
+}
+
+function updateHeaderStats() {
+  statRows.textContent = state.allRows.length.toLocaleString('es-ES');
+  statIds.textContent  = state.indexById.size.toLocaleString('es-ES');
+  statTracked.textContent = Object.keys(state.workStatus).length.toLocaleString('es-ES');
+}
+
+/* ================================================================== */
+/* SIDEBAR FACETS RENDERING ENGINE                                    */
+/* ================================================================== */
+function renderCheckboxFacet({ id, title, options, selected, searchable, initialShown = 6 }) {
+  const optionsHtml = options.map(o => `
+    <label class="facet-checkbox" data-value="${escapeHtml(o.value)}">
+      <input type="checkbox" ${selected.has(String(o.value)) ? 'checked' : ''}>
+      <span class="label" title="${escapeHtml(o.label)}">${escapeHtml(o.label)}</span>
+      <span class="count">${o.count.toLocaleString('es-ES')}</span>
+    </label>`).join('');
+
+  return `
+    <div class="facet" data-facet="${id}">
+      <div class="facet-title">
+        <span>${title}</span>
+        <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="facet-body">
+        ${searchable ? `<input type="text" class="facet-search" placeholder="Buscar..." data-facet-search="${id}">` : ''}
+        <div class="facet-options" data-shown="${initialShown}">${optionsHtml}</div>
+        ${options.length > initialShown ? `<div class="facet-show-more" data-toggle-more="${id}">Mostrar todos (${options.length})</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderFacets() {
+  facetsEl.innerHTML = [
+    renderCheckboxFacet({ id: 'categories', title: 'Categoría / Elemento', options: state.facetValues.categories, selected: state.filters.categories, searchable: false, initialShown: 9 }),
+    renderCheckboxFacet({ id: 'distritos', title: 'Distrito (EQM1)', options: state.facetValues.distritos, selected: state.filters.distritos, searchable: state.facetValues.distritos.length > 6 }),
+    renderCheckboxFacet({ id: 'lineas', title: 'Línea', options: state.facetValues.lineas, selected: state.filters.lineas, searchable: state.facetValues.lineas.length > 6 }),
+    renderCheckboxFacet({ id: 'estados', title: 'Estado del elemento', options: state.facetValues.estados, selected: state.filters.estados, searchable: false }),
+    `<div class="facet" data-facet="pk">
+      <div class="facet-title"><span>Rango de PK</span><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="facet-body">
+        <div class="flex items-center gap-2">
+          <input type="number" step="0.1" id="pk-min" class="range-input" placeholder="Mín.">
+          <span class="text-[var(--muted)]">—</span>
+          <input type="number" step="0.1" id="pk-max" class="range-input" placeholder="Máx.">
+        </div>
+      </div>
+    </div>`,
+    `<div class="facet" data-facet="via">
+      <div class="facet-title"><span>Vía (contiene)</span><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="facet-body"><input type="text" id="via-input" class="range-input" placeholder="p.ej. 'VIA 1', 'MERCANCIAS'..."></div>
+    </div>`,
+    `<div class="facet" data-facet="status">
+      <div class="facet-title"><span>Estado de trabajo</span><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="facet-body space-y-1">
+        ${['pending','progress','done'].map(s => `
+          <label class="facet-checkbox" data-status-filter="${s}">
+            <input type="checkbox" ${state.filters.statusSet.has(s) ? 'checked' : ''}>
+            <span class="dot inline-block w-2 h-2 rounded-full" style="background: var(--st-${s})"></span>
+            <span class="label">${STATUS_LABELS[s].text}</span>
+          </label>`).join('')}
+      </div>
+    </div>`
+  ].join('');
+  
+  wireFacetEvents();
+  applyShowMoreLimits();
+}
+
+function applyShowMoreLimits() {
+  facetsEl.querySelectorAll('.facet-options[data-shown]').forEach(box => {
+    const shown = parseInt(box.dataset.shown, 10);
+    box.querySelectorAll('.facet-checkbox').forEach((el, i) => { el.style.display = i < shown ? '' : 'none'; });
+  });
+}
+
+function wireFacetEvents() {
+  facetsEl.querySelectorAll('.facet-title').forEach(t => { t.addEventListener('click', () => t.parentElement.classList.toggle('collapsed')); });
+
+  facetsEl.querySelectorAll('[data-toggle-more]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const box = btn.parentElement.querySelector('.facet-options');
+      const labels = box.querySelectorAll('.facet-checkbox');
+      const allShown = box.dataset.expanded === '1';
+      if (allShown) {
+        const shown = parseInt(box.dataset.shown, 10);
+        labels.forEach((el, i) => { el.style.display = i < shown ? '' : 'none'; });
+        btn.textContent = `Mostrar todos (${labels.length})`;
+        box.dataset.expanded = '0';
+      } else {
+        labels.forEach(el => { el.style.display = ''; });
+        btn.textContent = 'Mostrar menos';
+        box.dataset.expanded = '1';
+      }
+    });
+  });
+
+  facetsEl.querySelectorAll('[data-facet-search]').forEach(input => {
+    input.addEventListener('input', () => {
+      const term = normalize(input.value);
+      const box = input.parentElement.querySelector('.facet-options');
+      box.querySelectorAll('.facet-checkbox').forEach(el => {
+        if (!term) { el.style.display = ''; return; }
+        el.style.display = normalize(el.textContent).includes(term) ? '' : 'none';
+      });
+    });
+  });
+
+  ['categories','distritos','lineas','estados'].forEach(facetId => {
+    const block = facetsEl.querySelector(`.facet[data-facet="${facetId}"]`);
+    if (!block) return;
+    block.querySelectorAll('.facet-checkbox').forEach(label => {
+      label.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'INPUT') {
+          const input = label.querySelector('input');
+          if (input) input.checked = !input.checked;
+        }
+        const value = label.dataset.value;
+        const setRef = state.filters[facetId];
+        if (label.querySelector('input').checked) setRef.add(value); else setRef.delete(value);
+        applyFilters();
+      });
+    });
+  });
+
+  facetsEl.querySelectorAll('[data-status-filter]').forEach(label => {
+    label.addEventListener('click', (e) => {
+      if (e.target.tagName !== 'INPUT') {
+        const input = label.querySelector('input');
+        if (input) input.checked = !input.checked;
+      }
+      const value = label.dataset.statusFilter;
+      if (label.querySelector('input').checked) state.filters.statusSet.add(value); else state.filters.statusSet.delete(value);
+      applyFilters();
+    });
+  });
+
+  const pkMinInput = $('pk-min'), pkMaxInput = $('pk-max');
+  const onPk = debounce(() => {
+    state.filters.pkMin = parseNumeric(pkMinInput.value);
+    state.filters.pkMax = parseNumeric(pkMaxInput.value);
+    applyFilters();
+  }, 220);
+  pkMinInput.addEventListener('input', onPk);
+  pkMaxInput.addEventListener('input', onPk);
+
+  const viaInput = $('via-input');
+  viaInput.addEventListener('input', debounce(() => {
+    state.filters.via = normalize(viaInput.value.trim());
+    applyFilters();
+  }, 180));
+}
+
+/* ================================================================== */
+/* QUERY ENGINE FILTERS & SEARCH                                      */
+/* ================================================================== */
+searchInput.addEventListener('input', debounce(() => {
+  state.filters.text = normalize(searchInput.value.trim());
+  state.page = 0;
+  clearSearchBtn.classList.toggle('hidden', !searchInput.value);
+  applyFilters();
+}, 180));
+
+clearSearchBtn.addEventListener('click', () => {
+  searchInput.value = ''; state.filters.text = '';
+  clearSearchBtn.classList.add('hidden');
+  applyFilters();
+});
+
+function applyFilters() {
+  const f = state.filters;
+  const tokens = f.text ? f.text.split(/\s+/).filter(Boolean) : [];
+  
+  const hasText = tokens.length > 0;
+  const hasCats = f.categories.size > 0;
+  const hasDis  = f.distritos.size  > 0;
+  const hasLin  = f.lineas.size     > 0;
+  const hasEst  = f.estados.size    > 0;
+  const hasVia  = f.via.length > 0;
+  const hasPkMin = f.pkMin !== null;
+  const hasPkMax = f.pkMax !== null;
+  const hasStatusFilter = f.statusSet.size > 0;
+
+  const out = [];
+  for (let i = 0; i < state.allRows.length; i++) {
+    const r = state.allRows[i];
+
+    if (hasCats && !f.categories.has(r._cat)) continue;
+    if (hasDis && !f.distritos.has(String(r['EQM1 Código'] || ''))) continue;
+    if (hasLin && !f.lineas.has(String(r['Línea Código'] || ''))) continue;
+    if (hasEst && (!r['Estado Elemento Inventario'] || !f.estados.has(String(r['Estado Elemento Inventario']).trim()))) continue;
+    
+    if (hasPkMin || hasPkMax) {
+      const pk = parseNumeric(r['PK Inicial']);
+      if (pk === null) continue;
+      if (hasPkMin && pk < f.pkMin) continue;
+      if (hasPkMax && pk > f.pkMax) continue;
+    }
+    if (hasVia && (!r['Vía'] || !normalize(r['Vía']).includes(f.via))) continue;
+    
+    if (hasStatusFilter) {
+      const id = r[KEY_FIELD];
+      const status = id != null && id !== '' ? (state.workStatus[String(id).trim()] || 'off') : 'off';
+      if (!f.statusSet.has(status)) continue;
+    }
+    
+    if (hasText) {
+      const blob = state.searchBlobs[i];
+      if (tokens.some(token => blob.indexOf(token) === -1)) continue;
+    }
+    out.push(i);
+  }
+
+  state.filtered = out;
+  state.page = 0;
+  sortFiltered();
+  renderChips();
+  renderResults();
+}
+
+function sortFiltered() {
+  const mode = state.sortBy;
+  const rows = state.allRows;
+  const statusRank = { pending: 0, progress: 1, done: 2, off: 3 };
+
+  state.filtered.sort((a, b) => {
+    const ra = rows[a], rb = rows[b];
+    switch (mode) {
+      case 'pk_asc':  return (parseNumeric(ra['PK Inicial']) ?? Infinity) - (parseNumeric(rb['PK Inicial']) ?? Infinity);
+      case 'pk_desc': return (parseNumeric(rb['PK Inicial']) ?? -Infinity) - (parseNumeric(ra['PK Inicial']) ?? -Infinity);
+      case 'line_asc': {
+        const la = parseNumeric(ra['Línea Código']) ?? Infinity;
+        const lb = parseNumeric(rb['Línea Código']) ?? Infinity;
+        if (la !== lb) return la - lb;
+        return (parseNumeric(ra['PK Inicial']) ?? Infinity) - (parseNumeric(rb['PK Inicial']) ?? Infinity);
+      }
+      case 'dist_asc': return String(ra['EQM1'] || '').localeCompare(String(rb['EQM1'] || ''), 'es');
+      case 'cat_asc':  return ra._catLabel.localeCompare(rb._catLabel, 'es');
+      case 'status':   return statusRank[state.workStatus[String(ra[KEY_FIELD]).trim()] || 'off'] - statusRank[state.workStatus[String(rb[KEY_FIELD]).trim()] || 'off'];
+    }
+    return 0;
+  });
+}
+
+sortBySel.addEventListener('change', () => { state.sortBy = sortBySel.value; sortFiltered(); renderResults(); });
+
+/* ================================================================== */
+/* ACTION CHIPS VIEW CONTROL                                          */
+/* ================================================================== */
+function renderChips() {
+  const f = state.filters;
+  const chips = [];
+
+  if (f.text) chips.push({ label: `“${f.text}”`, clear: () => { searchInput.value=''; f.text=''; clearSearchBtn.classList.add('hidden'); } });
+  for (const v of f.categories) chips.push({ label: `Cat: ${CATEGORIES.find(c=>c.key===v)?.label||v}`, clear: () => f.categories.delete(v) });
+  for (const v of f.distritos)  chips.push({ label: `Dto: ${v}`, clear: () => f.distritos.delete(v) });
+  for (const v of f.lineas)     chips.push({ label: `Línea: ${v}`,    clear: () => f.lineas.delete(v) });
+  for (const v of f.estados)    chips.push({ label: `${v}`,           clear: () => f.estados.delete(v) });
+  for (const v of f.statusSet)  chips.push({ label: `Trabajo: ${STATUS_LABELS[v].text}`, clear: () => f.statusSet.delete(v) });
+  if (f.via)                    chips.push({ label: `Vía ~ “${f.via}”`, clear: () => { f.via=''; const el=$('via-input'); if(el) el.value=''; } });
+  if (f.pkMin !== null)         chips.push({ label: `PK ≥ ${f.pkMin}`, clear: () => { f.pkMin=null; const el=$('pk-min'); if(el) el.value=''; } });
+  if (f.pkMax !== null)         chips.push({ label: `PK ≤ ${f.pkMax}`, clear: () => { f.pkMax=null; const el=$('pk-max'); if(el) el.value=''; } });
+
+  if (!chips.length) { activeChipsEl.classList.add('hidden'); return; }
+  activeChipsEl.classList.remove('hidden');
+  activeChipsEl.innerHTML = '';
+  
+  chips.forEach(c => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${escapeHtml(c.label)} <button><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`;
+    chip.querySelector('button').addEventListener('click', () => { c.clear(); renderFacets(); applyFilters(); });
+    activeChipsEl.appendChild(chip);
+  });
+}
+
+resetFiltersBtn.addEventListener('click', () => {
+  state.filters = { text:'', categories:new Set(), distritos:new Set(), lineas:new Set(), estados:new Set(), via:'', pkMin:null, pkMax:null, statusSet:new Set() };
+  searchInput.value = ''; clearSearchBtn.classList.add('hidden');
+  renderFacets(); applyFilters();
+});
+
+/* ================================================================== */
+/* RESULTS CARDS VIEW GENERATOR                                       */
+/* ================================================================== */
+function renderResults() {
+  const total = state.filtered.length;
+  const pages = Math.max(1, Math.ceil(total / state.pageSize));
+  if (state.page >= pages) state.page = pages - 1;
+  
+  const start = state.page * state.pageSize;
+  const end   = Math.min(start + state.pageSize, total);
+
+  resultCountEl.innerHTML = total ? `<span class="font-mono font-semibold text-[var(--ink)]">${total.toLocaleString('es-ES')}</span> elementos` : 'Sin resultados';
+  pageInfo.textContent = total ? `${(start+1).toLocaleString('es-ES')}–${end.toLocaleString('es-ES')} de ${total.toLocaleString('es-ES')}` : '0';
+  pageIndicator.textContent = `${state.page + 1} / ${pages}`;
+  pagePrev.disabled = state.page === 0;
+  pageNext.disabled = state.page >= pages - 1;
+
+  if (!total) {
+    cardsContainer.innerHTML = `<div class="bg-white border border-[var(--border)] rounded-xl p-16 text-center text-sm text-[var(--ink-3)]">No se encontraron elementos con los filtros actuales.</div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (let p = start; p < end; p++) { frag.appendChild(buildCard(state.filtered[p])); }
+  cardsContainer.innerHTML = '';
+  cardsContainer.appendChild(frag);
+  updateHeaderStats();
+}
+
+function buildCard(rowIdx) {
+  const row = state.allRows[rowIdx];
+  const idStr = row[KEY_FIELD] ? String(row[KEY_FIELD]).trim() : '';
+  const status = idStr ? (state.workStatus[idStr] || 'off') : 'off';
+
+  const card = document.createElement('article');
+  card.className = 'card fade-in';
+  if (status !== 'off') card.classList.add('has-status', `status-${status}`);
+  card.dataset.rowidx = rowIdx;
+
+  const cross = idStr ? (state.indexById.get(idStr) || []).length : 0;
+  const ident = row['Identificador Elemento Inventario'] || row['Descripción Elemento Inventario'] || row['Denominación'] || '(sin identificador)';
+  
+  const pkText = row['PK Final'] && row['PK Final'] !== row['PK Inicial'] ? `${fmt(row['PK Inicial'])} → ${fmt(row['PK Final'])}` : (fmt(row['PK Inicial']) || '—');
+  const lineaTxt = row['Línea Código'] ? `<span class="font-mono font-semibold">${fmt(row['Línea Código'])}</span> · ${escapeHtml(String(row['Línea Descripción'] || '').slice(0,35))}` : '—';
+
+  card.innerHTML = `
+    <header class="flex items-start justify-between gap-3 mb-2">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap mb-1.5">
+          <span class="pill pill-accent">${escapeHtml(row._catLabel)}</span>
+          ${idStr ? `<span class="font-mono text-[13px] font-semibold text-[var(--ink)]">ID ${escapeHtml(idStr)}</span>` : `<span class="text-xs text-[var(--st-pending)] italic">sin ID</span>`}
+          ${cross > 1 ? `<span class="pill pill-blue" title="Cruzado en ${cross} inventarios">⇄ ${cross} cruces</span>` : ''}
+        </div>
+        <h4 class="font-display text-base text-[var(--ink)] leading-snug truncate" title="${escapeHtml(ident)}">${escapeHtml(ident)}</h4>
+      </div>
+      <button class="status-toggle ${STATUS_LABELS[status].cls}" data-status-toggle><span class="dot"></span>${STATUS_LABELS[status].text}</button>
+    </header>
+    <div class="card-grid">
+      <div><div class="k">Distrito</div><div class="v">${fmt(row['EQM1']) || '—'}</div></div>
+      <div><div class="k">Línea</div><div class="v">${lineaTxt}</div></div>
+      <div><div class="k">Vía</div><div class="v">${fmt(row['Vía']) || '—'}</div></div>
+      <div><div class="k">PK</div><div class="v font-mono">${pkText}</div></div>
+      <div><div class="k">Trayecto</div><div class="v truncate">${fmt(row['Trayecto']) || '—'}</div></div>
+      <div><div class="k">Estado Elemento</div><div class="v">${fmt(row['Estado Elemento Inventario']) || '—'}</div></div>
+    </div>`;
+
+  card.addEventListener('click', (e) => { if (!e.target.closest('[data-status-toggle]')) openDetailPanel(idStr, rowIdx); });
+  card.querySelector('[data-status-toggle]').addEventListener('click', (e) => { e.stopPropagation(); if (idStr) cycleStatus(idStr, e.currentTarget, card); });
+  return card;
+}
+
+function cycleStatus(idStr, toggleEl, cardEl) {
+  const current = state.workStatus[idStr] || 'off';
+  const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length];
+
+  if (next === 'off') delete state.workStatus[idStr]; else state.workStatus[idStr] = next;
+  saveWorkStatus();
+
+  toggleEl.className = `status-toggle ${STATUS_LABELS[next].cls}`;
+  toggleEl.innerHTML = `<span class="dot"></span>${STATUS_LABELS[next].text}`;
+  cardEl.className = `card fade-in ${next !== 'off' ? `has-status status-${next}` : ''}`;
+
+  statTracked.textContent = Object.keys(state.workStatus).length.toLocaleString('es-ES');
+  if (state.sortBy === 'status' || state.filters.statusSet.size > 0) applyFilters();
+}
+
+/* ================================================================== */
+/* PAGINATION CONTROLS                                                */
+/* ================================================================== */
+pagePrev.addEventListener('click', () => { if (state.page > 0) { state.page--; renderResults(); window.scrollTo({ top: 0 }); } });
+pageNext.addEventListener('click', () => { if (state.page < Math.ceil(state.filtered.length / state.pageSize) - 1) { state.page++; renderResults(); window.scrollTo({ top: 0 }); } });
+pageSizeSel.addEventListener('change', () => { state.pageSize = parseInt(pageSizeSel.value, 10); state.page = 0; renderResults(); });
+
+/* ================================================================== */
+/* SIDE DETAIL PANEL ENGINE                                           */
+/* ================================================================== */
+function openDetailPanel(idStr, rowIdx) {
+  const occurrences = idStr ? (state.indexById.get(idStr) || []) : [];
+  detailIdEl.textContent = idStr || '(sin Id. Inventario)';
+  const status = idStr ? (state.workStatus[idStr] || 'off') : 'off';
+
+  let html = renderStatusBox(idStr, status);
+  if (occurrences.length > 1) {
+    html += `<div class="mb-5 p-3 rounded-lg bg-[var(--accent-soft)] border border-[#c9ddd6] text-sm text-[var(--accent-deep)]"><strong>Cruce crítico:</strong> Este componente coexiste en <strong>${occurrences.length}</strong> archivos diferentes del inventario.</div>`;
+  }
+
+  if (occurrences.length === 0) {
+    html += renderCategorySection(state.allRows[rowIdx]);
+  } else {
+    occurrences.forEach(i => { html += renderCategorySection(state.allRows[i]); });
+  }
+
+  detailBody.innerHTML = html;
+  
+  // Asociar evento al botón del panel lateral
+  const dtToggle = detailBody.querySelector('[data-detail-status-toggle]');
+  if (dtToggle && idStr) {
+    dtToggle.addEventListener('click', () => {
+      cycleStatus(idStr, dtToggle, document.createElement('div'));
+      renderResults();
+    });
+  }
+
+  detailBackdrop.classList.remove('hidden');
+  detailPanel.classList.remove('hidden');
+  detailPanel.classList.add('flex', 'slide-in');
+  document.body.style.overflow = 'hidden';
+}
+
+function renderStatusBox(idStr, status) {
+  if (!idStr) return '';
+  return `
+    <div class="mb-5 p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] flex items-center justify-between">
+      <div>
+        <div class="text-xs uppercase tracking-wider text-[var(--ink-3)] font-semibold">Estado de inspección</div>
+      </div>
+      <button class="status-toggle ${STATUS_LABELS[status].cls}" data-detail-status-toggle><span class="dot"></span>${STATUS_LABELS[status].text}</button>
+    </div>`;
+}
+
+function renderCategorySection(row) {
+  const cat = state.catMeta[row._cat];
+  const cols = state.catColumns[row._cat] || Object.keys(row).filter(k => k.charCodeAt(0) !== 95);
+
+  let html = `<section class="mb-6"><header class="flex items-center justify-between mb-3 pb-2 border-b-2 border-[var(--accent)]"><span class="font-display text-base text-[var(--ink)]">${escapeHtml(cat.label)}</span></header><div>`;
+  for (const col of cols) {
+    if (col.charCodeAt(0) === 95) continue;
+    const v = row[col];
+    const isEmpty = v === '' || v === null || v === undefined;
+    html += `<div class="kv-row"><div class="kv-key">${escapeHtml(col)}</div><div class="kv-val ${isEmpty ? 'empty' : ''}">${isEmpty ? '—' : escapeHtml(fmt(v))}</div></div>`;
+  }
+  return html + `</div></section>`;
+}
+
+function closeDetailPanel() { detailPanel.classList.add('hidden'); detailBackdrop.classList.add('hidden'); document.body.style.overflow = ''; }
+detailClose.addEventListener('click', closeDetailPanel);
+detailBackdrop.addEventListener('click', closeDetailPanel);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetailPanel(); });
+printBtn.addEventListener('click', () => window.print());
+
+</script>
+</body>
+</html>
