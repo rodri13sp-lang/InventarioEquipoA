@@ -594,7 +594,7 @@ const statIds         = $('stat-ids');
 const statTracked     = $('stat-tracked');
 
 /* ================================================================== */
-/* INITIALIZATION AUTOMATIC FLOW                                      */
+/* INITIALIZATION AUTOMATIC FLOW (EXCEL NATIVO EN SEGUNDO PLANO)       */
 /* ================================================================== */
 
 // Carga automática al arrancar la app en segundo plano
@@ -603,42 +603,118 @@ window.addEventListener('DOMContentLoaded', runAutomatedIntake);
 async function runAutomatedIntake() {
   let completedCount = 0;
   
-  // Inicializar interfaz visual de carga
-  INVENTARIOS_FILES.forEach(item => {
-    const indicator = document.createElement('div');
-    indicator.className = 'flex items-center justify-between py-1.5 text-xs text-[var(--ink-2)]';
-    indicator.id = `load-${item.key}`;
-    indicator.innerHTML = `<span>${item.label}</span><span class="font-mono text-[var(--muted)] pulse">Descargando...</span>`;
-    progressList.appendChild(indicator);
-  });
+  // Lista exacta con tus nombres originales de archivos .xls
+  const ARCHIVOS_EXCEL = [
+    { key: 'tramo_via',       label: 'Tramo de Vía',          file: 'TRAMO DE VIA.xls' },
+    { key: 'travesias',       label: 'Travesías',             file: 'TRAVESIAS.xls' },
+    { key: 'tuneles',         label: 'Túneles',               file: 'TUNELES.xls' },
+    { key: 'aparatos',        label: 'Aparatos Dilatación',   file: 'APARATOS DILATACION.xls' },
+    { key: 'desmontes',       label: 'Desmontes',             file: 'DESMONTES.xls' },
+    { key: 'desvios',         label: 'Desvíos',               file: 'DESVIOS.xls' },
+    { key: 'encarriladoras',  label: 'Encarriladoras',        file: 'ENCARRILADORAS.xls' },
+    { key: 'puentes',         label: 'Puentes',               file: 'PUENTES.xls' },
+    { key: 'terraplenes',     label: 'Terraplenes',           file: 'TERRAPLENES.xls' }
+  ];
 
-  // Ejecución asíncrona masiva en paralelo
-  const tasks = INVENTARIOS_FILES.map(async (fileConfig) => {
+  const elList = document.getElementById('progress-list');
+  const bar = document.getElementById('progress-bar');
+  
+  if (elList) {
+    elList.innerHTML = '';
+    ARCHIVOS_EXCEL.forEach(item => {
+      const indicator = document.createElement('div');
+      indicator.className = 'flex items-center justify-between py-1.5 text-xs text-[var(--ink-2)]';
+      indicator.id = `load-${item.key}`;
+      indicator.innerHTML = `<span>${item.label}</span><span class="font-mono text-[var(--muted)] pulse">Descargando Excel...</span>`;
+      elList.appendChild(indicator);
+    });
+  }
+
+  // Ejecución asíncrona en paralelo para devorar los .xls
+  const tasks = ARCHIVOS_EXCEL.map(async (fileConfig) => {
     const el = document.getElementById(`load-${fileConfig.key}`);
     try {
-      const result = await fetchAndProcessCSV(fileConfig);
-      
-      state.catColumns[fileConfig.key] = result.headers;
-      state.catMeta[fileConfig.key] = { fileName: fileConfig.file, rowCount: result.rows.length, label: fileConfig.label };
-      state.allRows.push(...result.rows);
+      // 1. Descarga el archivo de Excel como datos binarios (ArrayBuffer)
+      const response = await fetch(encodeURIComponent(fileConfig.file));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
 
-      if (el) el.innerHTML = `<span>${fileConfig.label}</span><span class="pill pill-accent">${result.rows.length.toLocaleString('es-ES')} filas</span>`;
+      // 2. Utiliza SheetJS para leer las celdas binarias nativas del .xls
+      const wb = XLSX.read(arrayBuffer, { type: 'array', dense: true, cellDates: true });
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+
+      // Convertimos la estructura respetando filas en blanco
+      const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: true });
+      
+      // Liberar memoria del objeto binario de SheetJS
+      delete wb.Sheets[sheetName];
+
+      // 3. Autodetectar fila de cabecera buscando Id. Inventario o Id. Raíz
+      let headerIdx = -1;
+      for (let i = 0; i < Math.min(15, aoa.length); i++) {
+        if (aoa[i] && aoa[i].some(cell => {
+          const cNorm = String(cell || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          return cNorm.includes('id. inventario') || cNorm.includes('id. raiz');
+        })) {
+          headerIdx = i;
+          break;
+        }
+      }
+      if (headerIdx === -1) headerIdx = 2; // Fallback clásico a fila 2
+
+      const headersRaw = (aoa[headerIdx] || []).map(h => String(h || '').trim());
+      let targetKeyHeader = headersRaw.find(h => {
+        const hNorm = h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return hNorm === 'id. inventario' || hNorm === 'id. raiz';
+      }) || headersRaw[0];
+
+      const processedRows = [];
+      for (let i = headerIdx + 1; i < aoa.length; i++) {
+        const arr = aoa[i];
+        if (!arr || arr.every(v => v === '')) continue;
+        
+        const obj = {};
+        let hasAny = false;
+        for (let c = 0; c < headersRaw.length; c++) {
+          const h = headersRaw[c]; if (!h) continue;
+          const val = arr[c];
+          if (val !== '') hasAny = true;
+          obj[h] = val;
+        }
+        
+        if (hasAny) {
+          if (obj[targetKeyHeader] && targetKeyHeader !== KEY_FIELD) {
+            obj[KEY_FIELD] = obj[targetKeyHeader];
+          }
+          obj._cat = fileConfig.key;
+          obj._catLabel = fileConfig.label;
+          obj._file = fileConfig.file;
+          processedRows.push(obj);
+        }
+      }
+
+      state.catColumns[fileConfig.key] = headersRaw.filter(Boolean);
+      state.catMeta[fileConfig.key] = { fileName: fileConfig.file, rowCount: processedRows.length, label: fileConfig.label };
+      state.allRows.push(...processedRows);
+
+      if (el) el.innerHTML = `<span>${fileConfig.label}</span><span class="pill pill-accent">${processedRows.length.toLocaleString('es-ES')} filas</span>`;
     } catch (err) {
       console.error(`Error procesando ${fileConfig.label}:`, err);
-      if (el) el.innerHTML = `<span>${fileConfig.label}</span><span class="text-[var(--st-pending)] font-semibold">Error de enlace</span>`;
+      if (el) el.innerHTML = `<span>${fileConfig.label}</span><span class="text-[var(--st-pending)] font-semibold">Error de archivo</span>`;
     } finally {
       completedCount++;
-      progressBar.style.width = `${Math.round((completedCount / INVENTARIOS_FILES.length) * 100)}%`;
+      if (bar) bar.style.width = `${Math.round((completedCount / ARCHIVOS_EXCEL.length) * 100)}%`;
     }
   });
 
   await Promise.all(tasks);
 
-  // Indexar y optimizar búsquedas cruzadas
+  // Construir indexación cruzada en la memoria del teléfono
   buildIndexAndBlobs();
   buildFacetValues();
 
-  // Transición suave al panel de control
+  // Transición suave al panel principal
   setTimeout(() => {
     uploadSection.classList.add('hidden');
     dashboard.classList.remove('hidden');
@@ -648,6 +724,85 @@ async function runAutomatedIntake() {
     headerStats.classList.remove('hidden');
     applyFilters();
   }, 400);
+}
+
+function buildIndexAndBlobs() {
+  state.indexById = new Map();
+  state.searchBlobs = new Array(state.allRows.length);
+
+  for (let i = 0; i < state.allRows.length; i++) {
+    const row = state.allRows[i];
+    const id = row[KEY_FIELD];
+    if (id !== '' && id !== null && id !== undefined) {
+      const k = String(id).trim();
+      let arr = state.indexById.get(k);
+      if (!arr) { arr = []; state.indexById.set(k, arr); }
+      arr.push(i);
+    }
+
+    let s = '';
+    for (const k in row) {
+      if (k.charCodeAt(0) === 95) continue;
+      const v = row[k];
+      if (v !== '' && v !== null && v !== undefined) s += ' ' + v;
+    }
+    state.searchBlobs[i] = normalize(s);
+  }
+}
+
+function buildFacetValues() {
+  const cats = new Map();
+  const distritos = new Map();
+  const lineas = new Map();
+  const estados = new Map();
+
+  for (const r of state.allRows) {
+    cats.set(r._cat, (cats.get(r._cat) || 0) + 1);
+
+    const dcode = r['EQM1 Código']; const dname = r['EQM1'];
+    if (dcode !== '' && dcode !== null && dcode !== undefined) {
+      const k = String(dcode).trim();
+      const e = distritos.get(k) || { code: dcode, name: dname || '', count: 0 };
+      e.count++;
+      distritos.set(k, e);
+    }
+
+    const lcode = r['Línea Código']; const ldesc = r['Línea Descripción'];
+    if (lcode !== '' && lcode !== null && lcode !== undefined) {
+      const k = String(lcode).trim();
+      const e = lineas.get(k) || { code: lcode, desc: ldesc || '', count: 0 };
+      e.count++;
+      lineas.set(k, e);
+    }
+
+    const est = r['Estado Elemento Inventario'];
+    if (est !== '' && est !== null && est !== undefined) {
+      const k = String(est).trim();
+      estados.set(k, (estados.get(k) || 0) + 1);
+    }
+  }
+
+  state.facetValues.categories = CATEGORIES
+    .filter(c => cats.has(c.key))
+    .map(c => ({ value: c.key, label: c.label, count: cats.get(c.key) }));
+
+  state.facetValues.distritos = [...distritos.values()]
+    .sort((a, b) => b.count - a.count)
+    .map(d => ({ value: String(d.code), label: `${d.code} · ${d.name}`, count: d.count }));
+
+  state.facetValues.lineas = [...lineas.values()]
+    .sort((a, b) => b.count - a.count)
+    .map(l => ({ value: String(l.code), label: `${l.code} · ${l.desc}`, count: l.count }));
+
+  state.facetValues.estados = [...estados.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([v, c]) => ({ value: v, label: v, count: c }));
+}
+
+function updateHeaderStats() {
+  statRows.textContent = state.allRows.length.toLocaleString('es-ES');
+  statIds.textContent  = state.indexById.size.toLocaleString('es-ES');
+  statTracked.textContent = Object.keys(state.workStatus).length.toLocaleString('es-ES');
 }
 
 function buildIndexAndBlobs() {
